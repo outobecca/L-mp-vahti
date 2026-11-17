@@ -1,0 +1,58 @@
+name: Julkaise GitHub Pagesiin
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hae lähdekoodi
+        uses: actions/checkout@v4
+
+      - name: Aseta Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Asenna riippuvuudet
+        run: npm ci
+
+      - name: Käännä GitHub Pages -yhteensopivaksi
+        run: |
+          if [ "${{ github.event.repository.name }}" = "${{ github.repository_owner }}.github.io" ]; then
+            npx vite build --base="/"
+          else
+            npx vite build --base="/${{ github.event.repository.name }}/"
+          fi
+
+      - name: Valmistele Pages-artefakti
+        uses: actions/configure-pages@v5
+
+      - name: Lataa dist-kansio artefaktiksi
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Julkaise GitHub Pagesiin
+        id: deployment
+        uses: actions/deploy-pages@v4
