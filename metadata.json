@@ -1,0 +1,6 @@
+{
+  "name": "Lämpövahti",
+  "description": "Reaaliaikainen lämmitysmuotojen vertailu ja kustannussäästölaskuri öljylle, pörssisähkölle ja polttopuulle.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
