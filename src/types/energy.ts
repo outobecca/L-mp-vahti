@@ -13,7 +13,11 @@ export type WoodUnitType =
   | 'birch_stacked'
   | 'mixed_loose'
   | 'custom_own'
-  | 'small_bag';
+  | 'small_bag'
+  | 'briquette_pack'
+  | 'briquette_pallet'
+  | 'pellet_bag'
+  | 'pellet_ton';
 
 export type OilPurchaseMode = 'bulk_tank' | 'pump_retail';
 

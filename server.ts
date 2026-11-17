@@ -128,14 +128,29 @@ async function fetchFromSpotHinta(): Promise<SpotPriceEntry[]> {
     if (!Array.isArray(json) || json.length === 0) {
       throw new Error('spot-hinta.fi returned empty prices');
     }
-    return json
-      .map((item) => {
-        const start = new Date(item.DateTime);
+    const buckets = new Map<string, number[]>();
+    for (const item of json) {
+      const dt = new Date(item.DateTime);
+      if (Number.isNaN(dt.getTime())) continue;
+      dt.setUTCMinutes(0, 0, 0);
+      const key = dt.toISOString();
+      const list = buckets.get(key);
+      if (list) {
+        list.push(item.PriceWithTax * 100);
+      } else {
+        buckets.set(key, [item.PriceWithTax * 100]);
+      }
+    }
+
+    return Array.from(buckets.entries())
+      .map(([startDate, values]) => {
+        const start = new Date(startDate);
         const end = new Date(start.getTime() + 3600 * 1000);
+        const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
         return {
-          startDate: start.toISOString(),
+          startDate,
           endDate: end.toISOString(),
-          priceCents: Number((item.PriceWithTax * 100).toFixed(3)),
+          priceCents: Number(avg.toFixed(3)),
         };
       })
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());

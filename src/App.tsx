@@ -13,6 +13,7 @@ import {
   getHelsinkiParts,
   simulateHourlySchedule,
 } from './utils/heatingMath';
+import { loadMarketData } from './utils/marketClient';
 import { FuelComparisonGrid } from './components/FuelComparisonGrid';
 import { HourlySpotChart } from './components/HourlySpotChart';
 import { SavingsCalculatorPanel } from './components/SavingsCalculatorPanel';
@@ -60,12 +61,7 @@ export default function App() {
     setErrorMsg(null);
 
     try {
-      const url = isManualRefresh ? '/api/market-data?refresh=1' : '/api/market-data';
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Palvelinvirhe (${response.status})`);
-      }
-      const data = (await response.json()) as MarketDataResponse;
+      const data = await loadMarketData(isManualRefresh);
       setMarketData(data);
     } catch (err) {
       setErrorMsg(

@@ -72,50 +72,142 @@ export function formatWattsLabel(watts: number): string {
 export const WOOD_UNIT_OPTIONS: Array<{
   id: WoodUnitType;
   label: string;
+  fuelTitle: string;
+  shortTitle: string;
   unitLabel: string;
   kwhPerUnit: number;
   defaultPriceEur: number;
+  defaultEfficiencyPct: number;
+  minPrice: number;
+  maxPrice: number;
+  priceStep: number;
   description: string;
 }> = [
   {
     id: 'birch_loose',
     label: 'Koivuklapi (heittomotti)',
+    fuelTitle: 'Polttopuu',
+    shortTitle: 'Polttopuu',
     unitLabel: 'i-m³',
     kwhPerUnit: 1010,
     defaultPriceEur: 88,
+    defaultEfficiencyPct: 82,
+    minPrice: 0,
+    maxPrice: 220,
+    priceStep: 2,
     description: 'Kuiva koivu ~1 010 kWh / irtokuutio',
   },
   {
     id: 'birch_stacked',
     label: 'Koivuklapi (pinokuutio)',
+    fuelTitle: 'Polttopuu',
+    shortTitle: 'Polttopuu',
     unitLabel: 'p-m³',
     kwhPerUnit: 1700,
     defaultPriceEur: 138,
+    defaultEfficiencyPct: 82,
+    minPrice: 0,
+    maxPrice: 260,
+    priceStep: 2,
     description: 'Tiiviisti ladottu koivu ~1 700 kWh / pinokuutio',
   },
   {
     id: 'mixed_loose',
     label: 'Sekapuu (heittomotti)',
+    fuelTitle: 'Polttopuu',
+    shortTitle: 'Polttopuu',
     unitLabel: 'i-m³',
     kwhPerUnit: 850,
     defaultPriceEur: 72,
+    defaultEfficiencyPct: 82,
+    minPrice: 0,
+    maxPrice: 200,
+    priceStep: 2,
     description: 'Havupuu / sekapuu ~850 kWh / irtokuutio',
   },
   {
     id: 'custom_own',
     label: 'Oma polttopuu (heittomotti)',
+    fuelTitle: 'Polttopuu',
+    shortTitle: 'Polttopuu',
     unitLabel: 'i-m³',
     kwhPerUnit: 980,
     defaultPriceEur: 28,
+    defaultEfficiencyPct: 82,
+    minPrice: 0,
+    maxPrice: 150,
+    priceStep: 2,
     description: 'Omakustannushinta (kaato, pilkonta, kuljetus)',
   },
   {
     id: 'small_bag',
     label: 'Klapisäkki 40 l (pikkupussi)',
+    fuelTitle: 'Polttopuu',
+    shortTitle: 'Polttopuu',
     unitLabel: 'pussi',
     kwhPerUnit: 50,
     defaultPriceEur: 9.9,
+    defaultEfficiencyPct: 82,
+    minPrice: 4,
+    maxPrice: 20,
+    priceStep: 0.1,
     description: 'Kauppa / huoltoasema ~50 kWh / pussi',
+  },
+  {
+    id: 'briquette_pack',
+    label: 'Puubriketti (10 kg paketti)',
+    fuelTitle: 'Puubriketti',
+    shortTitle: 'Briketti',
+    unitLabel: '10 kg',
+    kwhPerUnit: 50,
+    defaultPriceEur: 5.5,
+    defaultEfficiencyPct: 84,
+    minPrice: 2,
+    maxPrice: 14,
+    priceStep: 0.1,
+    description: 'Kuiva briketti ~5,0 kWh/kg · 50 kWh / paketti',
+  },
+  {
+    id: 'briquette_pallet',
+    label: 'Puubriketti (500 kg lava)',
+    fuelTitle: 'Puubriketti',
+    shortTitle: 'Briketti',
+    unitLabel: '500 kg',
+    kwhPerUnit: 2500,
+    defaultPriceEur: 260,
+    defaultEfficiencyPct: 84,
+    minPrice: 100,
+    maxPrice: 450,
+    priceStep: 5,
+    description: 'Brikettilava ~5,0 kWh/kg · 2 500 kWh / lava',
+  },
+  {
+    id: 'pellet_bag',
+    label: 'Puupelletti (15 kg säkki)',
+    fuelTitle: 'Puupelletti',
+    shortTitle: 'Pelletti',
+    unitLabel: '15 kg',
+    kwhPerUnit: 72.8,
+    defaultPriceEur: 8.5,
+    defaultEfficiencyPct: 88,
+    minPrice: 4,
+    maxPrice: 16,
+    priceStep: 0.1,
+    description: 'Pikkusäkki ~4,85 kWh/kg · 72,8 kWh / säkki',
+  },
+  {
+    id: 'pellet_ton',
+    label: 'Puupelletti (suursäkki / 1 000 kg)',
+    fuelTitle: 'Puupelletti',
+    shortTitle: 'Pelletti',
+    unitLabel: 't',
+    kwhPerUnit: 4850,
+    defaultPriceEur: 390,
+    defaultEfficiencyPct: 89,
+    minPrice: 200,
+    maxPrice: 700,
+    priceStep: 5,
+    description: 'Suursäkki tai irtotoimitus ~4 850 kWh / t',
   },
 ];
 
@@ -258,15 +350,19 @@ export function evaluateHeatingOptions(
     },
     {
       id: 'wood',
-      name: 'Polttopuu',
-      shortName: 'Polttopuu',
+      name: woodMeta.fuelTitle,
+      shortName: woodMeta.shortTitle,
       systemLabel: woodMeta.label,
       effectiveCentsPerKwh: woodCents,
       rawPriceLabel: `${formatNumber(
         settings.woodPriceEurPerUnit,
-        settings.woodUnitType === 'small_bag' || settings.woodPriceEurPerUnit % 1 !== 0 ? 2 : 0
-      )} € / ${woodMeta.unitLabel} (${woodMeta.kwhPerUnit} kWh)`,
-      efficiencyLabel: `Tulisijan hyötysuhde ${settings.woodEfficiencyPct} %`,
+        woodMeta.priceStep < 1 || settings.woodPriceEurPerUnit % 1 !== 0 ? 2 : 0
+      )} € / ${woodMeta.unitLabel} (${formatNumber(woodMeta.kwhPerUnit, woodMeta.kwhPerUnit % 1 !== 0 ? 1 : 0)} kWh)`,
+      efficiencyLabel: `${
+        woodMeta.fuelTitle === 'Puupelletti'
+          ? 'Pellettikattilan / -takan hyötysuhde'
+          : 'Tulisijan hyötysuhde'
+      } ${settings.woodEfficiencyPct} %`,
     },
     {
       id: 'oil',

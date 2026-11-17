@@ -69,6 +69,7 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
       ...settings,
       woodUnitType: unit,
       woodPriceEurPerUnit: found ? found.defaultPriceEur : settings.woodPriceEurPerUnit,
+      woodEfficiencyPct: found ? found.defaultEfficiencyPct : settings.woodEfficiencyPct,
     });
   };
 
@@ -106,7 +107,7 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
 
   const isModified = JSON.stringify(settings) !== JSON.stringify(DEFAULT_SETTINGS);
 
-  const isSmallBag = settings.woodUnitType === 'small_bag';
+  const isFractionalWoodUnit = woodMeta.priceStep < 1;
   const dailyWoodUnitsNeeded =
     settings.dailyKwh / (woodMeta.kwhPerUnit * (settings.woodEfficiencyPct / 100));
   const dailyOilLitersNeeded = settings.dailyKwh / (10 * (settings.oilEfficiencyPct / 100));
@@ -501,9 +502,11 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
 
         {/* Right column: Oil & Firewood */}
         <div className="space-y-6">
-          {/* Firewood */}
+          {/* Firewood, Briquettes & Pellets */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Polttopuu ja tulisija</h3>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+              Polttopuu, briketti ja pelletti
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {WOOD_UNIT_OPTIONS.map((opt) => {
                 const active = settings.woodUnitType === opt.id;
@@ -524,7 +527,7 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
                         active ? 'text-slate-300' : 'text-slate-500'
                       }`}
                     >
-                      {opt.kwhPerUnit} kWh / {opt.unitLabel}
+                      {formatNumber(opt.kwhPerUnit, opt.kwhPerUnit % 1 !== 0 ? 1 : 0)} kWh / {opt.unitLabel}
                     </div>
                   </button>
                 );
@@ -535,21 +538,21 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
               <div>
                 <div className="flex items-baseline justify-between text-xs mb-1.5">
                   <label className="text-slate-600 font-medium">
-                    Puun hinta (€ / {woodMeta.unitLabel})
+                    Hinta (€ / {woodMeta.unitLabel})
                   </label>
                   <span className="font-mono font-semibold text-slate-900 tabular-nums">
                     {formatNumber(
                       settings.woodPriceEurPerUnit,
-                      isSmallBag || settings.woodPriceEurPerUnit % 1 !== 0 ? 2 : 0
+                      isFractionalWoodUnit || settings.woodPriceEurPerUnit % 1 !== 0 ? 2 : 0
                     )}{' '}
                     €
                   </span>
                 </div>
                 <input
                   type="range"
-                  min={isSmallBag ? 4 : 0}
-                  max={isSmallBag ? 20 : 220}
-                  step={isSmallBag ? 0.1 : 2}
+                  min={woodMeta.minPrice}
+                  max={woodMeta.maxPrice}
+                  step={woodMeta.priceStep}
                   value={settings.woodPriceEurPerUnit}
                   onChange={(e) =>
                     onChange({ ...settings, woodPriceEurPerUnit: Number(e.target.value) })
@@ -560,7 +563,11 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
 
               <div>
                 <div className="flex items-baseline justify-between text-xs mb-1.5">
-                  <label className="text-slate-600 font-medium">Tulisijan hyötysuhde</label>
+                  <label className="text-slate-600 font-medium">
+                    {woodMeta.fuelTitle === 'Puupelletti'
+                      ? 'Kattilan / takan hyötysuhde'
+                      : 'Tulisijan hyötysuhde'}
+                  </label>
                   <span className="font-mono font-semibold text-slate-900 tabular-nums">
                     {settings.woodEfficiencyPct} %
                   </span>
@@ -568,7 +575,7 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
                 <input
                   type="range"
                   min={45}
-                  max={92}
+                  max={94}
                   step={1}
                   value={settings.woodEfficiencyPct}
                   onChange={(e) =>
@@ -583,10 +590,14 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
               <span>
                 Kulutus tänään:{' '}
                 <strong className="font-mono text-slate-700 tabular-nums">
-                  {formatNumber(dailyWoodUnitsNeeded, isSmallBag ? 1 : 2)} {woodMeta.unitLabel}/vrk
+                  {formatNumber(
+                    dailyWoodUnitsNeeded,
+                    woodMeta.kwhPerUnit >= 500 ? 2 : 1
+                  )}{' '}
+                  {woodMeta.unitLabel}/vrk
                 </strong>
               </span>
-              {isSmallBag && (
+              {settings.woodUnitType === 'small_bag' && (
                 <>
                   <span aria-hidden="true">·</span>
                   <span className="text-amber-700">
