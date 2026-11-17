@@ -1,11 +1,13 @@
 import React from 'react';
-import { Flame, Droplets, Zap, Check } from 'lucide-react';
+import { Flame, Droplets, Zap, Check, AlertTriangle } from 'lucide-react';
 import type { FuelEvaluation, FuelId } from '../types/energy';
 import { formatEur, formatNumber } from '../utils/heatingMath';
 
 interface FuelComparisonGridProps {
   evaluations: FuelEvaluation[];
   dailyKwh: number;
+  includeHotWater: boolean;
+  hotWaterKwhPerDay: number;
 }
 
 function getFuelIcon(id: FuelId) {
@@ -22,6 +24,8 @@ function getFuelIcon(id: FuelId) {
 export const FuelComparisonGrid: React.FC<FuelComparisonGridProps> = ({
   evaluations,
   dailyKwh,
+  includeHotWater,
+  hotWaterKwhPerDay,
 }) => {
   return (
     <section aria-label="Energiamuotojen vertailu">
@@ -60,7 +64,9 @@ export const FuelComparisonGrid: React.FC<FuelComparisonGridProps> = ({
 
               {/* Title */}
               <h3 className="text-lg font-semibold text-slate-900">{item.name}</h3>
-              <p className="text-xs text-slate-500 mt-0.5 truncate">{item.systemLabel}</p>
+              <p className="text-xs text-slate-500 mt-0.5 truncate" title={item.systemLabel}>
+                {item.systemLabel}
+              </p>
 
               {/* Primary KPI */}
               <div className="mt-5 pb-5 border-b border-slate-100">
@@ -71,27 +77,56 @@ export const FuelComparisonGrid: React.FC<FuelComparisonGridProps> = ({
                   <span className="text-sm font-mono text-slate-500">snt / kWh</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Hyödynnetyn lämpöenergian yksikköhinta
+                  Tilalämmityksen yksikköhinta
+                  {includeHotWater && (
+                    <span className="font-mono tabular-nums">
+                      {' '}
+                      · kokonaiskeskiarvo {formatNumber(item.blendedCentsPerKwh, 2)} snt
+                    </span>
+                  )}
                 </p>
               </div>
 
               {/* Cost breakdown rows */}
-              <dl className="mt-4 space-y-2.5 text-sm">
+              <dl className="mt-4 space-y-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="text-slate-500">Kustannus / vrk ({dailyKwh} kWh)</dt>
+                  <dt className="text-slate-500">Tilat ({dailyKwh} kWh/vrk)</dt>
                   <dd className="font-mono font-medium text-slate-900 tabular-nums">
+                    {formatEur(item.spaceHeatingDailyCostEur, 2)}
+                  </dd>
+                </div>
+
+                {includeHotWater && (
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-slate-500 flex items-center gap-1">
+                      {!item.canHeatHotWater && (
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      )}
+                      Käyttövesi ({hotWaterKwhPerDay} kWh)
+                    </dt>
+                    <dd className="font-mono font-medium text-slate-900 tabular-nums">
+                      {formatEur(item.hotWaterDailyCostEur, 2)}
+                    </dd>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+                  <dt className="text-slate-700 font-medium">Yhteensä / vrk</dt>
+                  <dd className="font-mono font-semibold text-slate-900 tabular-nums">
                     {formatEur(item.dailyCostEur, 2)}
                   </dd>
                 </div>
+
                 <div className="flex items-center justify-between gap-2">
                   <dt className="text-slate-500">Arvio / kk (30,4 vrk)</dt>
                   <dd className="font-mono font-medium text-slate-900 tabular-nums">
                     {formatEur(item.monthlyCostEur, 0)}
                   </dd>
                 </div>
+
                 <div className="flex items-center justify-between gap-2">
                   <dt className="text-slate-500">
-                    {isBest ? 'Edullisin vaihtoehto' : 'Lisäkustannus / vrk'}
+                    {isBest ? 'Edullisin kokonaisuus' : 'Lisäkustannus / vrk'}
                   </dt>
                   <dd
                     className={`font-mono font-medium tabular-nums ${
@@ -109,6 +144,11 @@ export const FuelComparisonGrid: React.FC<FuelComparisonGridProps> = ({
                   {item.rawPriceLabel}
                 </p>
                 <p>{item.efficiencyLabel}</p>
+                {includeHotWater && (
+                  <p className={!item.canHeatHotWater ? 'text-amber-700 font-medium' : 'text-slate-500'}>
+                    Käyttövesi: {item.hotWaterSourceLabel}
+                  </p>
+                )}
               </div>
             </div>
           );

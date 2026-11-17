@@ -6,7 +6,10 @@ import type {
   HourlySimulationPoint,
   HybridSummary,
   OilPurchaseMode,
+  OilSystemType,
+  RecommendationWarning,
   SpotPricePoint,
+  WoodSystemType,
   WoodUnitType,
 } from '../types/energy';
 
@@ -231,6 +234,53 @@ export const OIL_PURCHASE_OPTIONS: Array<{
   },
 ];
 
+export const WOOD_SYSTEM_OPTIONS: Array<{
+  id: WoodSystemType;
+  label: string;
+  canHeatHotWater: boolean;
+  description: string;
+}> = [
+  {
+    id: 'fireplace',
+    label: 'Takka / leivinuuni (ilmalämmitys)',
+    canHeatHotWater: false,
+    description: 'Lämmittää huoneilmaa · ei lämmitä käyttövettä tai pattereita',
+  },
+  {
+    id: 'wood_hydronic_boiler',
+    label: 'Vesikiertoinen puukattila + varaaja',
+    canHeatHotWater: true,
+    description: 'Lämmittää vesikiertoiset patterit ja käyttöveden',
+  },
+];
+
+export const OIL_SYSTEM_OPTIONS: Array<{
+  id: OilSystemType;
+  label: string;
+  canHeatHotWater: boolean;
+  description: string;
+}> = [
+  {
+    id: 'hydronic_boiler',
+    label: 'Vesikiertoiset patterit + käyttövesi',
+    canHeatHotWater: true,
+    description: 'Öljykattila lämmittää patteriverkon ja käyttöveden',
+  },
+  {
+    id: 'hydronic_separate_dhw',
+    label: 'Vesikiertoiset patterit (käyttövesi sähköllä)',
+    canHeatHotWater: false,
+    description: 'Patterit öljyllä, käyttövesi erillisellä sähkövaraajalla',
+  },
+];
+
+export const HOT_WATER_PRESETS: Array<{ kwh: number; label: string }> = [
+  { kwh: 6, label: '1 hlö · 6 kWh' },
+  { kwh: 10, label: '2–3 hlö · 10 kWh' },
+  { kwh: 15, label: '4–5 hlö · 15 kWh' },
+  { kwh: 20, label: 'Suuri kulutus · 20 kWh' },
+];
+
 export const HOME_SIZE_PRESETS: Array<{ m2: number; label: string; hint: string }> = [
   { m2: 75, label: '75 m²', hint: 'Pieni talo / rivitalo' },
   { m2: 120, label: '120 m²', hint: 'Keskikokoinen talo' },
@@ -254,6 +304,9 @@ export const DEFAULT_SETTINGS: HeatingSettings = {
   homeSizeM2: 120,
   outsideTempC: 0,
   dailyKwh: 58,
+  includeHotWater: true,
+  hotWaterKwhPerDay: 10,
+  dhwBackupFuel: 'electricity',
   electricSystem: 'direct',
   electricCop: 1.0,
   portableHeaterWatts: 1500,
@@ -261,9 +314,11 @@ export const DEFAULT_SETTINGS: HeatingSettings = {
   marginCents: 0.45,
   transferCents: 4.25,
   taxCents: 2.83,
+  oilSystemType: 'hydronic_boiler',
   oilPurchaseMode: 'bulk_tank',
   oilPriceEurPerLiter: 1.82,
   oilEfficiencyPct: 88,
+  woodSystemType: 'fireplace',
   woodUnitType: 'birch_loose',
   woodPriceEurPerUnit: 88,
   woodEfficiencyPct: 82,
@@ -320,16 +375,77 @@ export function evaluateHeatingOptions(
   const elecMeta = getElectricMeta(settings.electricSystem);
 
   const dailyKwh = settings.dailyKwh;
-  const hourlyKwh = dailyKwh / 24;
+  const hotWaterKwh = settings.includeHotWater ? settings.hotWaterKwhPerDay : 0;
+  const totalKwh = dailyKwh + hotWaterKwh;
+
+  const electricCanHeatDhw =
+    settings.electricSystem === 'direct' ||
+    settings.electricSystem === 'air_water_pump' ||
+    settings.electricSystem === 'ground_pump';
+  const electricSupportsHydronic =
+    settings.electricSystem === 'direct' ||
+    settings.electricSystem === 'air_water_pump' ||
+    settings.electricSystem === 'ground_pump';
+
+  const woodCanHeatDhw = settings.woodSystemType === 'wood_hydronic_boiler';
+  const oilCanHeatDhw = settings.oilSystemType === 'hydronic_boiler';
+
+  const calcDhwDailyCost = (
+    id: FuelId,
+    canHeatHotWater: boolean,
+    ownEffectiveCents: number
+  ): { costEur: number; sourceLabel: string } => {
+    if (!settings.includeHotWater || hotWaterKwh <= 0) {
+      return { costEur: 0, sourceLabel: 'Ei mukana vertailussa' };
+    }
+    if (canHeatHotWater) {
+      return {
+        costEur: (ownEffectiveCents * hotWaterKwh) / 100,
+        sourceLabel: 'Sisältyy järjestelmään',
+      };
+    }
+    if (settings.dhwBackupFuel === 'none') {
+      return {
+        costEur: 0,
+        sourceLabel: 'Ei tuoteta',
+      };
+    }
+    if (id === 'oil' && settings.oilSystemType === 'hydronic_separate_dhw') {
+      return {
+        costEur: (purchasedElecCents * hotWaterKwh) / 100,
+        sourceLabel: `Sähkövaraaja (${formatNumber(purchasedElecCents, 1)} snt/kWh)`,
+      };
+    }
+    if (settings.dhwBackupFuel === 'oil') {
+      return {
+        costEur: (oilCents * hotWaterKwh) / 100,
+        sourceLabel: `Öljykattila (${formatNumber(oilCents, 1)} snt/kWh)`,
+      };
+    }
+    return {
+      costEur: (purchasedElecCents * hotWaterKwh) / 100,
+      sourceLabel: `Sähkövaraaja (${formatNumber(purchasedElecCents, 1)} snt/kWh)`,
+    };
+  };
+
+  const elecDhw = calcDhwDailyCost('electricity', electricCanHeatDhw, elecCents);
+  const woodDhw = calcDhwDailyCost('wood', woodCanHeatDhw, woodCents);
+  const oilDhw = calcDhwDailyCost('oil', oilCanHeatDhw, oilCents);
 
   const rawItems: Array<{
     id: FuelId;
     name: string;
     shortName: string;
     systemLabel: string;
+    canHeatHotWater: boolean;
+    supportsHydronicRadiators: boolean;
     effectiveCentsPerKwh: number;
     rawPriceLabel: string;
     efficiencyLabel: string;
+    spaceHeatingDailyCostEur: number;
+    hotWaterDailyCostEur: number;
+    hotWaterSourceLabel: string;
+    dailyCostEur: number;
   }> = [
     {
       id: 'electricity',
@@ -341,18 +457,28 @@ export function evaluateHeatingOptions(
           : settings.electricSystem === 'construction_heater'
           ? `Rakennuslämmitin (${formatWattsLabel(settings.portableHeaterWatts)})`
           : elecMeta.label,
+      canHeatHotWater: electricCanHeatDhw,
+      supportsHydronicRadiators: electricSupportsHydronic,
       effectiveCentsPerKwh: elecCents,
       rawPriceLabel: `${formatNumber(effectiveSpot, 2)} snt spot + ${formatNumber(
         settings.marginCents + settings.transferCents + settings.taxCents,
         2
       )} snt siirto/vero (${formatNumber(purchasedElecCents, 2)} snt/kWh)`,
       efficiencyLabel: `Lämpökerroin COP ${formatNumber(settings.electricCop, 1)}`,
+      spaceHeatingDailyCostEur: (elecCents * dailyKwh) / 100,
+      hotWaterDailyCostEur: elecDhw.costEur,
+      hotWaterSourceLabel: elecDhw.sourceLabel,
+      dailyCostEur: (elecCents * dailyKwh) / 100 + elecDhw.costEur,
     },
     {
       id: 'wood',
-      name: woodMeta.fuelTitle,
+      name: settings.woodSystemType === 'fireplace' ? `${woodMeta.fuelTitle} (takka)` : `${woodMeta.fuelTitle} (vesikierto)`,
       shortName: woodMeta.shortTitle,
-      systemLabel: woodMeta.label,
+      systemLabel: `${woodMeta.label} · ${
+        settings.woodSystemType === 'fireplace' ? 'Takka / leivinuuni' : 'Vesikiertoinen puukattila'
+      }`,
+      canHeatHotWater: woodCanHeatDhw,
+      supportsHydronicRadiators: woodCanHeatDhw,
       effectiveCentsPerKwh: woodCents,
       rawPriceLabel: `${formatNumber(
         settings.woodPriceEurPerUnit,
@@ -363,45 +489,57 @@ export function evaluateHeatingOptions(
           ? 'Pellettikattilan / -takan hyötysuhde'
           : 'Tulisijan hyötysuhde'
       } ${settings.woodEfficiencyPct} %`,
+      spaceHeatingDailyCostEur: (woodCents * dailyKwh) / 100,
+      hotWaterDailyCostEur: woodDhw.costEur,
+      hotWaterSourceLabel: woodDhw.sourceLabel,
+      dailyCostEur: (woodCents * dailyKwh) / 100 + woodDhw.costEur,
     },
     {
       id: 'oil',
       name: 'Lämmitysöljy',
       shortName: 'Öljy',
-      systemLabel:
-        settings.oilPurchaseMode === 'pump_retail'
-          ? 'Pumpulta litra kerrallaan (10 kWh/l)'
-          : 'Säiliötoimitus (10 kWh/l)',
+      systemLabel: `${
+        settings.oilSystemType === 'hydronic_boiler'
+          ? 'Vesikiertoiset patterit + käyttövesi'
+          : 'Vesikiertoiset patterit (käyttövesi sähköllä)'
+      } · ${
+        settings.oilPurchaseMode === 'pump_retail' ? 'Pumpulta' : 'Säiliö'
+      }`,
+      canHeatHotWater: oilCanHeatDhw,
+      supportsHydronicRadiators: true,
       effectiveCentsPerKwh: oilCents,
       rawPriceLabel: `${formatNumber(settings.oilPriceEurPerLiter, 2)} € / litra`,
       efficiencyLabel: `Kattilan hyötysuhde ${settings.oilEfficiencyPct} %`,
+      spaceHeatingDailyCostEur: (oilCents * dailyKwh) / 100,
+      hotWaterDailyCostEur: oilDhw.costEur,
+      hotWaterSourceLabel: oilDhw.sourceLabel,
+      dailyCostEur: (oilCents * dailyKwh) / 100 + oilDhw.costEur,
     },
   ];
 
-  const sorted = [...rawItems].sort((a, b) => a.effectiveCentsPerKwh - b.effectiveCentsPerKwh);
+  const sorted = [...rawItems].sort((a, b) => a.dailyCostEur - b.dailyCostEur);
   const best = sorted[0];
 
   return sorted.map((item, index) => {
-    const hourlyCostEur = (item.effectiveCentsPerKwh * hourlyKwh) / 100;
-    const dailyCostEur = (item.effectiveCentsPerKwh * dailyKwh) / 100;
-    const monthlyCostEur = dailyCostEur * 30.4;
-    const annualCostEur = dailyCostEur * 365;
+    const hourlyCostEur = item.dailyCostEur / 24;
+    const monthlyCostEur = item.dailyCostEur * 30.4;
+    const annualCostEur = item.dailyCostEur * 365;
+    const blendedCentsPerKwh = totalKwh > 0 ? (item.dailyCostEur * 100) / totalKwh : item.effectiveCentsPerKwh;
 
-    const bestDailyEur = (best.effectiveCentsPerKwh * dailyKwh) / 100;
-    const savingsPerDayVsThis = Math.max(0, dailyCostEur - bestDailyEur);
+    const savingsPerDayVsThis = Math.max(0, item.dailyCostEur - best.dailyCostEur);
     const deltaPercentVsBest =
-      best.effectiveCentsPerKwh > 0
-        ? ((item.effectiveCentsPerKwh - best.effectiveCentsPerKwh) / best.effectiveCentsPerKwh) * 100
-        : item.effectiveCentsPerKwh > best.effectiveCentsPerKwh
+      best.dailyCostEur > 0
+        ? ((item.dailyCostEur - best.dailyCostEur) / best.dailyCostEur) * 100
+        : item.dailyCostEur > best.dailyCostEur
         ? 100
         : 0;
 
     return {
       ...item,
+      blendedCentsPerKwh,
       rank: index + 1,
       isRecommended: index === 0,
       hourlyCostEur,
-      dailyCostEur,
       monthlyCostEur,
       annualCostEur,
       deltaPercentVsBest,
@@ -410,6 +548,77 @@ export function evaluateHeatingOptions(
       savingsPerYearVsThis: savingsPerDayVsThis * 365,
     };
   });
+}
+
+export function getRecommendationWarnings(
+  recommended: FuelEvaluation,
+  settings: HeatingSettings
+): RecommendationWarning[] {
+  const warnings: RecommendationWarning[] = [];
+
+  if (!recommended.canHeatHotWater) {
+    if (recommended.id === 'wood' && settings.woodSystemType === 'fireplace') {
+      warnings.push({
+        id: 'fireplace_no_dhw',
+        severity: 'warning',
+        title: 'Huomio käyttövedestä ja vesikierrosta: Takalla ei voi lämmittää käyttövettä',
+        body: !settings.includeHotWater
+          ? `Takka lämmittää vain huoneilmaa eikä lämmitä käyttövettä. Ota käyttövesi mukaan laskuriin nähdäksesi erillisen sähkövaraajan tai öljykattilan todellisen lisäkustannuksen.`
+          : settings.dhwBackupFuel === 'none'
+          ? `Takka lämmittää vain huoneilmaa eikä tuota käyttövettä tai pattereiden kiertovettä. Käyttöveden tuotannoksi on valittu "Ei tuoteta" (0,00 €/vrk) — lämmintä käyttövettä ei siis tällä valinnalla synny ilman erillistä varaajaa tai kattilaa.`
+          : `Takka lämmittää vain huoneilmaa eikä tuota käyttövettä tai pattereiden kiertovettä. Lämpimän käyttöveden (${settings.hotWaterKwhPerDay} kWh/vrk) osuus (${formatEur(
+              recommended.hotWaterDailyCostEur,
+              2
+            )}/vrk · ${recommended.hotWaterSourceLabel}) on laskettu mukaan kokonaiskustannukseen.`,
+      });
+    } else if (recommended.id === 'electricity') {
+      warnings.push({
+        id: 'electric_no_dhw',
+        severity: 'warning',
+        title: `Huomio käyttövedestä: ${recommended.systemLabel} ei lämmitä käyttövettä`,
+        body: !settings.includeHotWater
+          ? `Valittu lämmityslaite lämmittää vain huoneilmaa. Käyttöveden lämmitykseen tarvitaan erillinen sähkövaraaja tai öljykattila.`
+          : settings.dhwBackupFuel === 'none'
+          ? `Valittu lämmityslaite lämmittää vain huoneilmaa, ja käyttöveden tuotannoksi on valittu "Ei tuoteta" (0,00 €/vrk). Lämpimään käyttöveteen tarvitaan erillinen varaaja tai kattila.`
+          : `Valittu lämmityslaite lämmittää vain huoneilmaa. Lämpimän käyttöveden (${settings.hotWaterKwhPerDay} kWh/vrk) osuus (${formatEur(
+              recommended.hotWaterDailyCostEur,
+              2
+            )}/vrk · ${recommended.hotWaterSourceLabel}) on lisätty kokonaislaskelmaan.`,
+      });
+    } else if (recommended.id === 'oil' && settings.oilSystemType === 'hydronic_separate_dhw') {
+      warnings.push({
+        id: 'oil_separate_dhw',
+        severity: settings.dhwBackupFuel === 'none' ? 'warning' : 'info',
+        title:
+          settings.dhwBackupFuel === 'none'
+            ? 'Huomio käyttövedestä: Käyttövettä ei tuoteta'
+            : 'Käyttövesi lämpiää sähkövaraajalla',
+        body: !settings.includeHotWater
+          ? `Öljykattila lämmittää vain patterit; muista huomioida erillisen sähkövaraajan käyttövesikustannus.`
+          : settings.dhwBackupFuel === 'none'
+          ? `Öljykattila lämmittää vain vesikiertoiset patterit, ja käyttöveden tuotanto on asetettu tilaan "Ei tuoteta" (0,00 €/vrk).`
+          : `Öljykattila lämmittää vain vesikiertoiset patterit. Lämpimän käyttöveden (${settings.hotWaterKwhPerDay} kWh/vrk) kustannus (${formatEur(
+              recommended.hotWaterDailyCostEur,
+              2
+            )}/vrk) lasketaan pörssisähkön mukaan.`,
+      });
+    }
+  }
+
+  // Hydronic radiator freeze / cold room warning when switching off boiler in freezing weather
+  if (
+    !recommended.supportsHydronicRadiators &&
+    settings.outsideTempC <= -10
+  ) {
+    warnings.push({
+      id: 'hydronic_freeze_risk',
+      severity: 'warning',
+      title: `Pakkashuomio vesikiertoisille pattereille (${settings.outsideTempC} °C)`,
+      body: `Jos kohteessa on vesikiertoinen patterilämmitys ja pääkattila kytketään pois pelkän ilmalämmityksen (takka, ilmalämpöpumppu tai irtolämmitin) ajaksi, pidä patteriverkon kierto- ja peruslämpö päällä ulkoseinien ja pesutilojen jäätymisriskin välttämiseksi.`,
+    });
+  }
+
+  return warnings;
 }
 
 export function getHelsinkiParts(isoDate: string): {

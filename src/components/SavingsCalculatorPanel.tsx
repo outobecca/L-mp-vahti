@@ -10,9 +10,12 @@ import {
   DEFAULT_SETTINGS,
   ELECTRIC_SYSTEM_OPTIONS,
   HOME_SIZE_PRESETS,
+  HOT_WATER_PRESETS,
   OIL_PURCHASE_OPTIONS,
+  OIL_SYSTEM_OPTIONS,
   OUTSIDE_TEMP_PRESETS,
   PORTABLE_HEATER_WATTS_PRESETS,
+  WOOD_SYSTEM_OPTIONS,
   WOOD_UNIT_OPTIONS,
   estimateDailyKwh,
   formatEur,
@@ -237,7 +240,7 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
             <div>
               <div className="flex items-baseline justify-between gap-2 mb-2">
                 <label htmlFor="daily-kwh-slider" className="text-sm font-medium text-slate-900">
-                  Vuorokauden lämmitystarve
+                  Tilojen lämmitystarve
                 </label>
                 <span className="font-mono text-sm font-semibold text-slate-900 tabular-nums">
                   {settings.dailyKwh} kWh / vrk ({formatNumber(settings.dailyKwh * 365, 0)} kWh/v)
@@ -253,6 +256,115 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
                 onChange={(e) => onChange({ ...settings, dailyKwh: Number(e.target.value) })}
                 className="w-full energy-slider"
               />
+            </div>
+
+            {/* Domestic Hot Water (Käyttövesi) */}
+            <div className="pt-4 border-t border-slate-100 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm font-medium text-slate-900">Lämmin käyttövesi</span>
+                  <p className="text-xs text-slate-500">
+                    Huomioidaanko käyttövesi (takka, ilmalämpöpumppu ja irtopatterit eivät lämmitä sitä).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.includeHotWater}
+                  onClick={() =>
+                    onChange({ ...settings, includeHotWater: !settings.includeHotWater })
+                  }
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    settings.includeHotWater
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {settings.includeHotWater ? 'Mukana vertailussa' : 'Pois vertailusta'}
+                </button>
+              </div>
+
+              {settings.includeHotWater && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {HOT_WATER_PRESETS.map((preset) => (
+                        <button
+                          key={preset.kwh}
+                          type="button"
+                          onClick={() =>
+                            onChange({ ...settings, hotWaterKwhPerDay: preset.kwh })
+                          }
+                          className={`px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
+                            settings.hotWaterKwhPerDay === preset.kwh
+                              ? 'bg-slate-900 text-white border-slate-900 font-medium'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="font-mono text-xs font-semibold text-slate-900 tabular-nums">
+                      {settings.hotWaterKwhPerDay} kWh/vrk
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={4}
+                    max={25}
+                    step={1}
+                    value={settings.hotWaterKwhPerDay}
+                    onChange={(e) =>
+                      onChange({ ...settings, hotWaterKwhPerDay: Number(e.target.value) })
+                    }
+                    className="w-full energy-slider"
+                    aria-label="Käyttöveden energiatarve"
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-600">
+                      Käyttövesi tuotetaan takan/ilmalämpöpumpun aikana:
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1 p-0.5 bg-slate-100 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => onChange({ ...settings, dhwBackupFuel: 'electricity' })}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          settings.dhwBackupFuel === 'electricity'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Sähkövaraajalla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onChange({ ...settings, dhwBackupFuel: 'oil' })}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          settings.dhwBackupFuel === 'oil'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Öljykattilalla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onChange({ ...settings, dhwBackupFuel: 'none' })}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          settings.dhwBackupFuel === 'none'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Ei tuoteta
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -505,8 +617,37 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
           {/* Firewood, Briquettes & Pellets */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 mb-3">
-              Polttopuu, briketti ja pelletti
+              Puulämmitys: tulisija ja polttoaine
             </h3>
+
+            {/* Wood system type: Fireplace vs Hydronic wood boiler */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+              {WOOD_SYSTEM_OPTIONS.map((opt) => {
+                const active = settings.woodSystemType === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onChange({ ...settings, woodSystemType: opt.id })}
+                    className={`text-left px-3.5 py-2.5 rounded-lg border transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-xs font-medium truncate">{opt.label}</div>
+                    <div
+                      className={`text-[11px] mt-0.5 truncate ${
+                        active ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {opt.description}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {WOOD_UNIT_OPTIONS.map((opt) => {
                 const active = settings.woodUnitType === opt.id;
@@ -615,8 +756,36 @@ export const SavingsCalculatorPanel: React.FC<SavingsCalculatorPanelProps> = ({
           {/* Heating Oil */}
           <div className="pt-5 border-t border-slate-100">
             <h3 className="text-sm font-semibold text-slate-900 mb-3">
-              Lämmitysöljy (kevyt polttoöljy / pumpputankkaus)
+              Öljylämmitys: vesikiertoinen patterilämmitys ja hankinta
             </h3>
+
+            {/* Oil system type: hydronic boiler + DHW vs separate DHW */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              {OIL_SYSTEM_OPTIONS.map((opt) => {
+                const active = settings.oilSystemType === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onChange({ ...settings, oilSystemType: opt.id })}
+                    className={`text-left px-3.5 py-2.5 rounded-lg border transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-xs font-medium truncate">{opt.label}</div>
+                    <div
+                      className={`text-[11px] mt-0.5 truncate ${
+                        active ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {opt.description}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {OIL_PURCHASE_OPTIONS.map((opt) => {

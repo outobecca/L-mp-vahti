@@ -21,6 +21,19 @@ export type WoodUnitType =
 
 export type OilPurchaseMode = 'bulk_tank' | 'pump_retail';
 
+export type WoodSystemType = 'fireplace' | 'wood_hydronic_boiler';
+
+export type OilSystemType = 'hydronic_boiler' | 'hydronic_separate_dhw';
+
+export type DhwBackupFuel = 'electricity' | 'oil' | 'none';
+
+export interface RecommendationWarning {
+  id: string;
+  severity: 'warning' | 'info';
+  title: string;
+  body: string;
+}
+
 export interface SpotPricePoint {
   startDate: string;
   endDate: string;
@@ -52,6 +65,9 @@ export interface HeatingSettings {
   homeSizeM2: number;
   outsideTempC: number;
   dailyKwh: number;
+  includeHotWater: boolean;
+  hotWaterKwhPerDay: number;
+  dhwBackupFuel: DhwBackupFuel;
   electricSystem: ElectricSystemType;
   electricCop: number;
   portableHeaterWatts: number;
@@ -59,9 +75,11 @@ export interface HeatingSettings {
   marginCents: number;
   transferCents: number;
   taxCents: number;
+  oilSystemType: OilSystemType;
   oilPurchaseMode: OilPurchaseMode;
   oilPriceEurPerLiter: number;
   oilEfficiencyPct: number;
+  woodSystemType: WoodSystemType;
   woodUnitType: WoodUnitType;
   woodPriceEurPerUnit: number;
   woodEfficiencyPct: number;
@@ -73,9 +91,15 @@ export interface FuelEvaluation {
   name: string;
   shortName: string;
   systemLabel: string;
+  canHeatHotWater: boolean;
+  supportsHydronicRadiators: boolean;
   effectiveCentsPerKwh: number;
+  blendedCentsPerKwh: number;
   rawPriceLabel: string;
   efficiencyLabel: string;
+  spaceHeatingDailyCostEur: number;
+  hotWaterDailyCostEur: number;
+  hotWaterSourceLabel: string;
   hourlyCostEur: number;
   dailyCostEur: number;
   monthlyCostEur: number;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, ArrowRight, Flame, Zap, Droplets } from 'lucide-react';
+import { RefreshCw, ArrowRight, Flame, Zap, Droplets, AlertTriangle, Info } from 'lucide-react';
 import type { HeatingSettings, MarketDataResponse } from './types/energy';
 import {
   DEFAULT_SETTINGS,
@@ -11,6 +11,7 @@ import {
   formatEur,
   formatNumber,
   getHelsinkiParts,
+  getRecommendationWarnings,
   simulateHourlySchedule,
 } from './utils/heatingMath';
 import { loadMarketData } from './utils/marketClient';
@@ -118,6 +119,11 @@ export default function App() {
   const recommended = evaluations[0];
   const secondBest = evaluations[1];
   const mostExpensive = evaluations[2];
+
+  const recommendationWarnings = useMemo(
+    () => getRecommendationWarnings(recommended, settings),
+    [recommended, settings]
+  );
 
   const inspectedTimeLabel = useMemo(() => {
     if (!currentSpotPoint) return 'Nykyhetki';
@@ -321,7 +327,8 @@ export default function App() {
               })}
             </div>
             <span className="font-mono tabular-nums">
-              {settings.homeSizeM2} m² · {settings.dailyKwh} kWh/vrk
+              {settings.homeSizeM2} m² · Tilat {settings.dailyKwh} kWh
+              {settings.includeHotWater ? ` + Vesi ${settings.hotWaterKwhPerDay} kWh` : ''}/vrk
             </span>
           </div>
         </div>
@@ -369,10 +376,20 @@ export default function App() {
                       </h1>
 
                       <p className="text-base text-slate-600 max-w-2xl leading-relaxed">
-                        Tuotetun lämpöenergian yksikköhinta on{' '}
+                        Tilalämmityksen yksikköhinta on{' '}
                         <strong className="font-mono text-slate-900 tabular-nums">
                           {formatCents(recommended.effectiveCentsPerKwh, 2)}
+                        </strong>{' '}
+                        ja kokonaiskustannus{' '}
+                        <strong className="font-mono text-slate-900 tabular-nums">
+                          {formatEur(recommended.dailyCostEur, 2)}/vrk
                         </strong>
+                        {settings.includeHotWater
+                          ? ` (tilat ${formatEur(recommended.spaceHeatingDailyCostEur, 2)} € + käyttövesi ${formatEur(
+                              recommended.hotWaterDailyCostEur,
+                              2
+                            )} €)`
+                          : ''}
                         . Säästät{' '}
                         <strong className="font-mono text-emerald-700 tabular-nums">
                           {formatEur(secondBest.savingsPerDayVsThis, 2)}/vrk
@@ -428,12 +445,50 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Contextual Warning Sign based on user's equipment & hot water selections */}
+                  {recommendationWarnings.length > 0 && (
+                    <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
+                      {recommendationWarnings.map((warn) => {
+                        const isWarning = warn.severity === 'warning';
+                        return (
+                          <div
+                            key={warn.id}
+                            role="alert"
+                            className={`rounded-lg border p-4 flex items-start gap-3 ${
+                              isWarning
+                                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                                : 'bg-slate-50 border-slate-200 text-slate-800'
+                            }`}
+                          >
+                            {isWarning ? (
+                              <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                            ) : (
+                              <Info className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
+                            )}
+                            <div className="space-y-1 text-sm">
+                              <p className="font-semibold leading-snug">{warn.title}</p>
+                              <p
+                                className={`leading-relaxed text-xs sm:text-sm ${
+                                  isWarning ? 'text-amber-900' : 'text-slate-600'
+                                }`}
+                              >
+                                {warn.body}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </section>
 
                 {/* 3-Column Comparison Grid */}
                 <FuelComparisonGrid
                   evaluations={evaluations}
                   dailyKwh={settings.dailyKwh}
+                  includeHotWater={settings.includeHotWater}
+                  hotWaterKwhPerDay={settings.hotWaterKwhPerDay}
                 />
 
                 {/* 48h Interactive Chart */}
